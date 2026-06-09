@@ -1,0 +1,12 @@
+github.com/RealAlexandreAI/json-repair v0.0.15 h1:AN8/yt8rcphwQrIs/FZeki+cKaIERUNr25zf1flirIs=
+github.com/RealAlexandreAI/json-repair v0.0.15/go.mod h1:GKJi5borR78O8c7HCVbgqjhoiVibZ6hJldxbc6dGrAI=
+github.com/ebitengine/purego v0.8.4 h1:CF7LEKg5FFOsASUj0+QwaXf8Ht6TlFxg09+S9wz0omw=
+github.com/ebitengine/purego v0.8.4/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
+github.com/gen2brain/go-fitz v1.24.15 h1:sJNB1MOWkqnzzENPHggFpgxTwW0+S5WF/rM5wUBpJWo=
+github.com/gen2brain/go-fitz v1.24.15/go.mod h1:SftkiVbTHqF141DuiLwBBM65zP7ig6AVDQpf2WlHamo=
+github.com/jupiterrider/ffi v0.5.0 h1:j2nSgpabbV1JOwgP4Kn449sJUHq3cVLAZVBoOYn44V8=
+github.com/jupiterrider/ffi v0.5.0/go.mod h1:x7xdNKo8h0AmLuXfswDUBxUsd2OqUP4ekC8sCnsmbvo=
+github.com/kiry163/easyllm v0.2.3 h1:pNJc1SEX9Wa0IwIlfU8EBAja/tTxBTuMZrJa3KfEGsM=
+github.com/kiry163/easyllm v0.2.3/go.mod h1:rhSqjaO6pC/zv91knwYhlP8izgOkuuttz6R43GIp130=
+golang.org/x/sys v0.33.0 h1:q3i8TbbEz+JRD9ywIRlyRAQbM0qF7hu24q3teo2hbuw=
+golang.org/x/sys v0.33.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
