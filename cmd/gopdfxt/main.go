@@ -29,6 +29,7 @@ func main() {
 
 	opts := gopdfxt.Options{
 		LLM:      llmOptions(*provider, *apiKey, *model),
+		Hooks:    progressHooks(os.Stderr),
 		LLMHooks: debugHooks(*debugDir),
 	}
 	if *debugDir != "" {
@@ -69,6 +70,18 @@ func llmOptions(provider, apiKey, model string) gopdfxt.LLMOptions {
 		Model:          model,
 		EnableThinking: &enableThinking,
 	}
+}
+
+func progressHooks(out *os.File) gopdfxt.Hooks {
+	return gopdfxt.Hooks{
+		OnPageDone: func(ctx context.Context, e gopdfxt.PageDoneEvent) {
+			fmt.Fprintln(out, formatProgress(e.PageIndex+1, e.PageCount))
+		},
+	}
+}
+
+func formatProgress(done, total int) string {
+	return fmt.Sprintf("processed pages: %d/%d", done, total)
 }
 
 type debugExtractor struct {

@@ -60,6 +60,7 @@ type PageStartEvent struct {
 
 type PageDoneEvent struct {
 	PageIndex int
+	PageCount int
 	Elapsed   time.Duration
 }
 

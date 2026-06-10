@@ -44,6 +44,58 @@ func TestPipelineConvertsExtractedDocument(t *testing.T) {
 	}
 }
 
+func TestPipelinePageDoneIncludesPageCount(t *testing.T) {
+	extractor := fakeExtractor{doc: &document.Document{
+		PDF:       "sample.pdf",
+		PageCount: 2,
+		Pages: []document.Page{
+			{
+				PageIndex:   0,
+				ImageBase64: "aGVsbG8=",
+				Blocks:      []document.Block{{BlockID: "p000-b000", PageIndex: 0, Text: "First"}},
+			},
+			{
+				PageIndex:   1,
+				ImageBase64: "aGVsbG8=",
+				Blocks:      []document.Block{{BlockID: "p001-b000", PageIndex: 1, Text: "Second"}},
+			},
+		},
+	}}
+	classifier := fakeClassifier{results: []document.PageStructure{
+		{
+			PageType: "body",
+			Groups:   []document.Group{{Kind: "paragraph", BlockIDs: []string{"p000-b000"}}},
+		},
+		{
+			PageType: "body",
+			Groups:   []document.Group{{Kind: "paragraph", BlockIDs: []string{"p001-b000"}}},
+		},
+	}}
+
+	var counts []int
+	_, err := Convert(context.Background(), Options{
+		Extractor:   extractor,
+		Classifier:  classifier,
+		Concurrency: 1,
+		Hooks: Hooks{
+			OnPageDone: func(ctx context.Context, e PageDoneEvent) {
+				counts = append(counts, e.PageCount)
+			},
+		},
+	}, Input{Path: "sample.pdf"})
+	if err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+	if len(counts) != 2 {
+		t.Fatalf("expected 2 page done events, got %d", len(counts))
+	}
+	for _, count := range counts {
+		if count != 2 {
+			t.Fatalf("expected page count 2, got %d", count)
+		}
+	}
+}
+
 type fakeExtractor struct {
 	doc *document.Document
 }

@@ -15,7 +15,7 @@ type Input struct {
 }
 
 type Result struct {
-	Content string
+	Content  string
 	Articles []Article
 }
 
@@ -62,6 +62,7 @@ type PageStartEvent struct {
 
 type PageDoneEvent struct {
 	PageIndex int
+	PageCount int
 	Elapsed   time.Duration
 }
 
@@ -81,7 +82,7 @@ func Convert(ctx context.Context, opts Options, input Input) (*Result, error) {
 		return nil, err
 	}
 
-	pageResults, err := classifyPages(ctx, opts, doc.Pages)
+	pageResults, err := classifyPages(ctx, opts, doc.Pages, doc.PageCount)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func Convert(ctx context.Context, opts Options, input Input) (*Result, error) {
 	return result, nil
 }
 
-func classifyPages(ctx context.Context, opts Options, pages []document.Page) ([]document.PageStructure, error) {
+func classifyPages(ctx context.Context, opts Options, pages []document.Page, pageCount int) ([]document.PageStructure, error) {
 	if opts.Classifier == nil {
 		return nil, fmt.Errorf("pipeline classifier is required")
 	}
@@ -145,7 +146,11 @@ func classifyPages(ctx context.Context, opts Options, pages []document.Page) ([]
 
 			results[i] = result
 			if opts.Hooks.OnPageDone != nil {
-				opts.Hooks.OnPageDone(ctx, PageDoneEvent{PageIndex: page.PageIndex, Elapsed: time.Since(started)})
+				opts.Hooks.OnPageDone(ctx, PageDoneEvent{
+					PageIndex: page.PageIndex,
+					PageCount: pageCount,
+					Elapsed:   time.Since(started),
+				})
 			}
 		}(i, page)
 	}

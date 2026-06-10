@@ -117,7 +117,11 @@ func (c *Converter) pipelineHooks() pipeline.Hooks {
 		},
 		OnPageDone: func(ctx context.Context, e pipeline.PageDoneEvent) {
 			if c.options.Hooks.OnPageDone != nil {
-				c.options.Hooks.OnPageDone(ctx, PageDoneEvent{PageIndex: e.PageIndex, Elapsed: e.Elapsed})
+				c.options.Hooks.OnPageDone(ctx, PageDoneEvent{
+					PageIndex: e.PageIndex,
+					PageCount: e.PageCount,
+					Elapsed:   e.Elapsed,
+				})
 			}
 		},
 		OnPageError: func(ctx context.Context, e pipeline.PageErrorEvent) {
