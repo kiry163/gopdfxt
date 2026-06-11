@@ -9,8 +9,7 @@ import (
 
 func TestClassifierClassifiesBodyPage(t *testing.T) {
 	runner := &fakeToolRunner{
-		filter: PageFilterResult{PageType: "body"},
-		structure: StructureResult{Groups: []document.Group{
+		analysis: PageAnalysisResult{PageType: "body", Groups: []document.Group{
 			{Kind: "heading", Level: 1, BlockIDs: []string{"p000-b000"}},
 		}},
 	}
@@ -30,11 +29,14 @@ func TestClassifierClassifiesBodyPage(t *testing.T) {
 	if got.PageType != "body" || len(got.Groups) != 1 {
 		t.Fatalf("unexpected page structure: %+v", got)
 	}
+	if runner.analysisCalls != 1 {
+		t.Fatalf("expected one analysis call, got %d", runner.analysisCalls)
+	}
 }
 
-func TestClassifierReturnsNonBodyWithoutStructureCall(t *testing.T) {
+func TestClassifierReturnsNonBodyFromSingleAnalysisCall(t *testing.T) {
 	runner := &fakeToolRunner{
-		filter: PageFilterResult{PageType: "non_body"},
+		analysis: PageAnalysisResult{PageType: "non_body"},
 	}
 	classifier := NewClassifier(runner, Options{})
 
@@ -45,24 +47,17 @@ func TestClassifierReturnsNonBodyWithoutStructureCall(t *testing.T) {
 	if got.PageType != "non_body" {
 		t.Fatalf("expected non_body page, got %+v", got)
 	}
-	if runner.structureCalls != 0 {
-		t.Fatalf("expected no structure tool call, got %d", runner.structureCalls)
+	if runner.analysisCalls != 1 {
+		t.Fatalf("expected one analysis call, got %d", runner.analysisCalls)
 	}
 }
 
 type fakeToolRunner struct {
-	filter         PageFilterResult
-	structure      StructureResult
-	filterCalls    int
-	structureCalls int
+	analysis      PageAnalysisResult
+	analysisCalls int
 }
 
-func (f *fakeToolRunner) RunFilter(ctx context.Context, page document.Page, prompt string) (*PageFilterResult, error) {
-	f.filterCalls++
-	return &f.filter, nil
-}
-
-func (f *fakeToolRunner) RunStructure(ctx context.Context, page document.Page, prompt string) (*StructureResult, error) {
-	f.structureCalls++
-	return &f.structure, nil
+func (f *fakeToolRunner) RunAnalysis(ctx context.Context, page document.Page, prompt string) (*PageAnalysisResult, error) {
+	f.analysisCalls++
+	return &f.analysis, nil
 }

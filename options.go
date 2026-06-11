@@ -13,12 +13,13 @@ import (
 var ErrInvalidOptions = errors.New("invalid gopdfxt options")
 
 type Options struct {
-	LLM         LLMOptions
-	Extractor   Extractor
-	Concurrency int
-	Timeout     time.Duration
-	Hooks       Hooks
-	LLMHooks    easyllm.Hooks
+	LLM          LLMOptions
+	Extractor    Extractor
+	Concurrency  int
+	AllowPartial bool
+	Timeout      time.Duration
+	Hooks        Hooks
+	LLMHooks     easyllm.Hooks
 }
 
 type LLMOptions struct {
@@ -26,6 +27,7 @@ type LLMOptions struct {
 	APIKey                  string
 	BaseURL                 string
 	Model                   string
+	ImageDetail             easyllm.ImageDetail
 	Temperature             *float64
 	TopP                    *float64
 	MaxTokens               *int
@@ -59,9 +61,11 @@ type PageStartEvent struct {
 }
 
 type PageDoneEvent struct {
-	PageIndex int
-	PageCount int
-	Elapsed   time.Duration
+	PageIndex  int
+	PageCount  int
+	ModelCalls int
+	Retries    int
+	Elapsed    time.Duration
 }
 
 type PageErrorEvent struct {
@@ -104,4 +108,11 @@ func (o Options) normalizedConcurrency() int {
 		return 4
 	}
 	return o.Concurrency
+}
+
+func (o Options) normalizedImageDetail() easyllm.ImageDetail {
+	if o.LLM.ImageDetail == "" {
+		return easyllm.ImageDetailAuto
+	}
+	return o.LLM.ImageDetail
 }

@@ -12,8 +12,7 @@ type Options struct {
 }
 
 type Runner interface {
-	RunFilter(ctx context.Context, page document.Page, prompt string) (*PageFilterResult, error)
-	RunStructure(ctx context.Context, page document.Page, prompt string) (*StructureResult, error)
+	RunAnalysis(ctx context.Context, page document.Page, prompt string) (*PageAnalysisResult, error)
 }
 
 type Classifier struct {
@@ -26,37 +25,29 @@ func NewClassifier(runner Runner, opts Options) *Classifier {
 }
 
 func (c *Classifier) ClassifyPage(ctx context.Context, page document.Page) (document.PageStructure, error) {
-	filter, err := c.classifyFilter(ctx, page)
+	analysis, err := c.classifyAnalysis(ctx, page)
 	if err != nil {
 		return document.PageStructure{}, err
 	}
-	if filter.PageType == "non_body" {
-		return document.PageStructure{PageType: "non_body"}, nil
-	}
-
-	filtered := FilterPageBlocks(page, filter)
-	structure, err := c.classifyStructure(ctx, filtered)
-	if err != nil {
-		return document.PageStructure{}, err
+	if analysis.PageType == "non_body" {
+		return document.PageStructure{
+			PageType:   "non_body",
+			ModelCalls: analysis.ModelCalls,
+			Retries:    analysis.Retries,
+		}, nil
 	}
 
 	return document.PageStructure{
-		PageType:       "body",
-		IgnoreBlockIDs: filter.IgnoreBlockIDs,
-		Groups:         structure.Groups,
+		PageType:       analysis.PageType,
+		IgnoreBlockIDs: analysis.IgnoreBlockIDs,
+		Groups:         analysis.Groups,
+		ModelCalls:     analysis.ModelCalls,
+		Retries:        analysis.Retries,
 	}, nil
 }
 
-func (c *Classifier) classifyFilter(ctx context.Context, page document.Page) (*PageFilterResult, error) {
-	result, err := c.runner.RunFilter(ctx, page, prompt.BuildContentFilter(page))
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func (c *Classifier) classifyStructure(ctx context.Context, page document.Page) (*StructureResult, error) {
-	result, err := c.runner.RunStructure(ctx, page, prompt.BuildStructure(page))
+func (c *Classifier) classifyAnalysis(ctx context.Context, page document.Page) (*PageAnalysisResult, error) {
+	result, err := c.runner.RunAnalysis(ctx, page, prompt.BuildAnalysis(page))
 	if err != nil {
 		return nil, err
 	}

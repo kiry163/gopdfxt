@@ -7,7 +7,7 @@ import (
 	"github.com/kiry163/gopdfxt/internal/document"
 )
 
-func TestBuildStructureRequiresCoverage(t *testing.T) {
+func TestBuildAnalysisCombinesFilteringAndStructure(t *testing.T) {
 	page := document.Page{
 		PageIndex: 0,
 		Blocks: []document.Block{
@@ -15,10 +15,13 @@ func TestBuildStructureRequiresCoverage(t *testing.T) {
 		},
 	}
 
-	prompt := BuildStructure(page)
+	prompt := BuildAnalysis(page)
 
 	for _, want := range []string{
-		"每个 block_id 必须且只能出现一次",
+		"submit_page_analysis",
+		"page_type",
+		"ignore_block_ids",
+		"每个 block_id 必须且只能出现在 groups 中一次",
 		"groups",
 		"heading",
 		"paragraph",

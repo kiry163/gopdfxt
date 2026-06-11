@@ -83,11 +83,15 @@ converter, err := gopdfxt.New(gopdfxt.Options{
 		BaseURL:  "https://example.com/v1",
 		APIKey:   os.Getenv("MODEL_API_KEY"),
 		Model:    "your-vlm-model",
+		ImageDetail: gopdfxt.ImageDetailLow,
 		Timeout:  2 * time.Minute,
 	},
 	Concurrency: 8,
+	AllowPartial: true,
 })
 ```
+
+Set `AllowPartial` to keep successful pages when some pages fail. Failed pages are returned in `Result.FailedPages`, and aggregate counts are returned in `Result.Details`.
 
 Use `DefaultExtractor` when you want to tune the built-in PDF extractor:
 
@@ -137,7 +141,8 @@ The built-in extractor is used by default. Pass `Extractor` only if you want to 
 The repository includes a small example command:
 
 ```bash
-go run ./cmd/gopdfxt -input paper.pdf -api-key "$DASHSCOPE_API_KEY"
+go run ./cmd/gopdfxt -input paper.pdf -api-key "$DASHSCOPE_API_KEY" -result result.json
 ```
 
 The command is intentionally thin and intended for local testing and debugging; library usage is the primary API.
+It writes a JSON result file by default, including extracted article content, failed pages, and processing details.

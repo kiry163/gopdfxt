@@ -35,4 +35,6 @@ type PageStructure struct {
 	PageType       string   `json:"page_type"`
 	IgnoreBlockIDs []string `json:"ignore_block_ids"`
 	Groups         []Group  `json:"groups"`
+	ModelCalls     int      `json:"model_calls,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
 }

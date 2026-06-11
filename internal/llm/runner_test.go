@@ -8,38 +8,12 @@ import (
 	"github.com/kiry163/gopdfxt/internal/document"
 )
 
-func TestEngineRunnerRunFilterUsesToolCall(t *testing.T) {
-	client := toolClient{
-		toolName: "submit_page_filter",
+func TestEngineRunnerRunAnalysisUsesToolCall(t *testing.T) {
+	client := &toolClient{
+		toolName: "submit_page_analysis",
 		args: map[string]any{
 			"page_type":        "body",
 			"ignore_block_ids": []any{"p000-b001", "p000-b001"},
-		},
-	}
-	runner := NewEngineRunner(client, easyllm.Hooks{})
-
-	result, err := runner.RunFilter(context.Background(), document.Page{
-		PageIndex: 0,
-		Blocks: []document.Block{
-			{BlockID: "p000-b000"},
-			{BlockID: "p000-b001"},
-		},
-	}, "filter prompt")
-	if err != nil {
-		t.Fatalf("RunFilter returned error: %v", err)
-	}
-	if result.PageType != "body" {
-		t.Fatalf("expected body page, got %+v", result)
-	}
-	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "p000-b001" {
-		t.Fatalf("expected deduped ignore ids, got %+v", result.IgnoreBlockIDs)
-	}
-}
-
-func TestEngineRunnerRunStructureUsesToolCall(t *testing.T) {
-	client := toolClient{
-		toolName: "submit_page_structure",
-		args: map[string]any{
 			"groups": []any{
 				map[string]any{
 					"kind":      "heading",
@@ -49,28 +23,70 @@ func TestEngineRunnerRunStructureUsesToolCall(t *testing.T) {
 			},
 		},
 	}
-	runner := NewEngineRunner(client, easyllm.Hooks{})
+	runner := NewEngineRunner(client, easyllm.Hooks{}, easyllm.ImageDetailLow)
 
-	result, err := runner.RunStructure(context.Background(), document.Page{
+	result, err := runner.RunAnalysis(context.Background(), document.Page{
 		PageIndex: 0,
 		Blocks: []document.Block{
 			{BlockID: "p000-b000"},
+			{BlockID: "p000-b001"},
 		},
-	}, "structure prompt")
+	}, "analysis prompt")
 	if err != nil {
-		t.Fatalf("RunStructure returned error: %v", err)
+		t.Fatalf("RunAnalysis returned error: %v", err)
+	}
+	if result.PageType != "body" {
+		t.Fatalf("expected body page, got %+v", result)
+	}
+	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "p000-b001" {
+		t.Fatalf("expected deduped ignore ids, got %+v", result.IgnoreBlockIDs)
 	}
 	if len(result.Groups) != 1 || result.Groups[0].Kind != "heading" {
-		t.Fatalf("unexpected structure result: %+v", result)
+		t.Fatalf("unexpected analysis result: %+v", result)
+	}
+	if result.ModelCalls != 1 || result.Retries != 0 {
+		t.Fatalf("unexpected stats: calls=%d retries=%d", result.ModelCalls, result.Retries)
+	}
+}
+
+func TestEngineRunnerUsesConfiguredImageDetail(t *testing.T) {
+	client := &toolClient{
+		toolName: "submit_page_analysis",
+		args: map[string]any{
+			"page_type":        "non_body",
+			"ignore_block_ids": []any{},
+			"groups":           []any{},
+		},
+	}
+	runner := NewEngineRunner(client, easyllm.Hooks{}, easyllm.ImageDetailLow)
+
+	_, err := runner.RunAnalysis(context.Background(), document.Page{
+		PageIndex:   0,
+		ImageBase64: "aGVsbG8=",
+	}, "analysis prompt")
+	if err != nil {
+		t.Fatalf("RunAnalysis returned error: %v", err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("expected one model request, got %d", len(client.requests))
+	}
+	user, ok := client.requests[0].Input[0].(easyllm.UserMessageItem)
+	if !ok {
+		t.Fatalf("expected user message input, got %T", client.requests[0].Input[0])
+	}
+	if len(user.Content) == 0 || user.Content[0].Detail != easyllm.ImageDetailLow {
+		t.Fatalf("expected low image detail, got %+v", user.Content)
 	}
 }
 
 type toolClient struct {
 	toolName string
 	args     map[string]any
+	requests []easyllm.ModelRequest
 }
 
-func (c toolClient) Generate(ctx context.Context, req easyllm.ModelRequest) (*easyllm.ModelResponse, error) {
+func (c *toolClient) Generate(ctx context.Context, req easyllm.ModelRequest) (*easyllm.ModelResponse, error) {
+	c.requests = append(c.requests, req)
 	return &easyllm.ModelResponse{
 		Output: []easyllm.OutputItem{
 			easyllm.AssistantOutput{
@@ -88,6 +104,6 @@ func (c toolClient) Generate(ctx context.Context, req easyllm.ModelRequest) (*ea
 	}, nil
 }
 
-func (c toolClient) GenerateStream(ctx context.Context, req easyllm.ModelRequest, handler easyllm.StreamHandler) error {
+func (c *toolClient) GenerateStream(ctx context.Context, req easyllm.ModelRequest, handler easyllm.StreamHandler) error {
 	panic("not implemented")
 }

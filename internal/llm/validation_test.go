@@ -56,3 +56,38 @@ func TestValidateStructureResultReportsCoverageIssues(t *testing.T) {
 		t.Fatalf("expected missing id issue, got %v", issues)
 	}
 }
+
+func TestRepairAnalysisResultDropsInvalidIDsAndAddsMissingBlocks(t *testing.T) {
+	page := document.Page{
+		PageIndex: 0,
+		Blocks: []document.Block{
+			{BlockID: "a"},
+			{BlockID: "b"},
+			{BlockID: "c"},
+		},
+	}
+
+	result := RepairAnalysisResult(page, &PageAnalysisResult{
+		PageType:       "body",
+		IgnoreBlockIDs: []string{"c", "missing"},
+		Groups: []document.Group{
+			{Kind: "paragraph", BlockIDs: []string{"a", "unknown", "a"}},
+		},
+	})
+
+	if result.PageType != "body" {
+		t.Fatalf("expected body page, got %+v", result)
+	}
+	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "c" {
+		t.Fatalf("expected repaired ignore ids, got %+v", result.IgnoreBlockIDs)
+	}
+	if len(result.Groups) != 2 {
+		t.Fatalf("expected original group plus missing group, got %+v", result.Groups)
+	}
+	if len(result.Groups[0].BlockIDs) != 1 || result.Groups[0].BlockIDs[0] != "a" {
+		t.Fatalf("expected invalid and duplicate ids removed, got %+v", result.Groups[0].BlockIDs)
+	}
+	if len(result.Groups[1].BlockIDs) != 1 || result.Groups[1].BlockIDs[0] != "b" {
+		t.Fatalf("expected missing id appended as paragraph, got %+v", result.Groups[1].BlockIDs)
+	}
+}

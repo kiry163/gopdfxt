@@ -7,4 +7,8 @@ const (
 	ProviderQwen             = easyllm.ProviderQwen
 	ProviderDeepSeek         = easyllm.ProviderDeepSeek
 	ProviderOpenAICompatible = easyllm.ProviderOpenAICompatible
+
+	ImageDetailAuto = easyllm.ImageDetailAuto
+	ImageDetailLow  = easyllm.ImageDetailLow
+	ImageDetailHigh = easyllm.ImageDetailHigh
 )

@@ -17,6 +17,14 @@ type StructureResult struct {
 	Groups []document.Group `json:"groups"`
 }
 
+type PageAnalysisResult struct {
+	PageType       string
+	IgnoreBlockIDs []string
+	Groups         []document.Group
+	ModelCalls     int
+	Retries        int
+}
+
 func ValidatePageFilterResult(page document.Page, result *PageFilterResult) []string {
 	if result == nil || result.PageType != "body" {
 		return nil
@@ -97,6 +105,122 @@ func FilterPageBlocks(page document.Page, filterResult *PageFilterResult) docume
 		filtered.Blocks = append(filtered.Blocks, block)
 	}
 	return filtered
+}
+
+func RepairAnalysisResult(page document.Page, result *PageAnalysisResult) *PageAnalysisResult {
+	if result == nil {
+		result = &PageAnalysisResult{}
+	}
+
+	repaired := &PageAnalysisResult{
+		PageType:   strings.TrimSpace(strings.ToLower(result.PageType)),
+		ModelCalls: result.ModelCalls,
+		Retries:    result.Retries,
+	}
+	if repaired.PageType != "non_body" {
+		repaired.PageType = "body"
+	}
+	if repaired.PageType == "non_body" {
+		return repaired
+	}
+
+	validIDs := make(map[string]struct{}, len(page.Blocks))
+	for _, block := range page.Blocks {
+		validIDs[block.BlockID] = struct{}{}
+	}
+
+	ignored := make(map[string]struct{}, len(result.IgnoreBlockIDs))
+	for _, blockID := range result.IgnoreBlockIDs {
+		blockID = strings.TrimSpace(blockID)
+		if blockID == "" {
+			continue
+		}
+		if _, ok := validIDs[blockID]; !ok {
+			continue
+		}
+		if _, ok := ignored[blockID]; ok {
+			continue
+		}
+		ignored[blockID] = struct{}{}
+		repaired.IgnoreBlockIDs = append(repaired.IgnoreBlockIDs, blockID)
+	}
+
+	retainedIDs := make(map[string]struct{}, len(page.Blocks))
+	for _, block := range page.Blocks {
+		if _, skip := ignored[block.BlockID]; skip {
+			continue
+		}
+		retainedIDs[block.BlockID] = struct{}{}
+	}
+	if len(retainedIDs) == 0 {
+		repaired.PageType = "non_body"
+		repaired.IgnoreBlockIDs = nil
+		return repaired
+	}
+
+	seen := make(map[string]struct{}, len(retainedIDs))
+	for _, group := range result.Groups {
+		group = normalizeGroup(group)
+		var blockIDs []string
+		for _, blockID := range group.BlockIDs {
+			blockID = strings.TrimSpace(blockID)
+			if blockID == "" {
+				continue
+			}
+			if _, ok := retainedIDs[blockID]; !ok {
+				continue
+			}
+			if _, ok := seen[blockID]; ok {
+				continue
+			}
+			seen[blockID] = struct{}{}
+			blockIDs = append(blockIDs, blockID)
+		}
+		if len(blockIDs) == 0 {
+			continue
+		}
+		group.BlockIDs = blockIDs
+		repaired.Groups = append(repaired.Groups, group)
+	}
+
+	var missing []string
+	for _, block := range page.Blocks {
+		if _, ok := retainedIDs[block.BlockID]; !ok {
+			continue
+		}
+		if _, ok := seen[block.BlockID]; ok {
+			continue
+		}
+		missing = append(missing, block.BlockID)
+	}
+	if len(missing) > 0 {
+		repaired.Groups = append(repaired.Groups, document.Group{
+			Kind:     "paragraph",
+			BlockIDs: missing,
+		})
+	}
+	return repaired
+}
+
+func normalizeGroup(group document.Group) document.Group {
+	kind := strings.TrimSpace(strings.ToLower(group.Kind))
+	switch kind {
+	case "heading":
+		if group.Level != 1 {
+			kind = "paragraph"
+			group.Level = 0
+		}
+	case "paragraph", "formula", "image", "table":
+		group.Level = 0
+	default:
+		kind = "paragraph"
+		group.Level = 0
+	}
+	if kind != "heading" {
+		group.Level = 0
+	}
+	group.Kind = kind
+	return group
 }
 
 func sortedSetValues(values map[string]struct{}) []string {

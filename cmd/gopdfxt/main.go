@@ -16,6 +16,7 @@ import (
 func main() {
 	input := flag.String("input", "", "path to input PDF")
 	output := flag.String("output", "", "optional text output path")
+	resultPath := flag.String("result", "result.json", "optional JSON result output path")
 	provider := flag.String("provider", gopdfxt.ProviderQwen, "LLM provider")
 	model := flag.String("model", "qwen3-vl-plus", "LLM model")
 	apiKey := flag.String("api-key", os.Getenv("GOPDFXT_API_KEY"), "LLM API key")
@@ -28,9 +29,11 @@ func main() {
 	}
 
 	opts := gopdfxt.Options{
-		LLM:      llmOptions(*provider, *apiKey, *model),
-		Hooks:    progressHooks(os.Stderr),
-		LLMHooks: debugHooks(*debugDir),
+		LLM:          llmOptions(*provider, *apiKey, *model),
+		Concurrency:  30,
+		AllowPartial: true,
+		Hooks:        progressHooks(os.Stderr),
+		LLMHooks:     debugHooks(*debugDir),
 	}
 	if *debugDir != "" {
 		opts.Extractor = debugExtractor{
@@ -49,6 +52,13 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	if *resultPath != "" {
+		if err := writeJSON(*resultPath, result); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 
 	outputText := formatResult(result)
@@ -76,6 +86,9 @@ func progressHooks(out *os.File) gopdfxt.Hooks {
 	return gopdfxt.Hooks{
 		OnPageDone: func(ctx context.Context, e gopdfxt.PageDoneEvent) {
 			fmt.Fprintln(out, formatProgress(e.PageIndex+1, e.PageCount))
+		},
+		OnPageError: func(ctx context.Context, e gopdfxt.PageErrorEvent) {
+			fmt.Fprintf(out, "page failed: %d: %v\n", e.PageIndex+1, e.Err)
 		},
 	}
 }

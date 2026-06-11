@@ -33,7 +33,7 @@ func (c *Converter) ConvertFile(ctx context.Context, path string) (*Result, erro
 	if err != nil {
 		return nil, err
 	}
-	classifier := internalllm.NewClassifier(internalllm.NewEngineRunner(client, c.options.LLMHooks), internalllm.Options{
+	classifier := internalllm.NewClassifier(internalllm.NewEngineRunner(client, c.options.LLMHooks, c.options.normalizedImageDetail()), internalllm.Options{
 		OnRetry: func(pageIndex int, stage string, attempt int, err error) {
 			if c.options.Hooks.OnRetry != nil {
 				c.options.Hooks.OnRetry(ctx, RetryEvent{
@@ -47,10 +47,11 @@ func (c *Converter) ConvertFile(ctx context.Context, path string) (*Result, erro
 	})
 
 	result, err := pipeline.Convert(ctx, pipeline.Options{
-		Extractor:   publicExtractorAdapter{extractor: c.options.Extractor},
-		Classifier:  classifier,
-		Concurrency: c.options.normalizedConcurrency(),
-		Hooks:       c.pipelineHooks(),
+		Extractor:    publicExtractorAdapter{extractor: c.options.Extractor},
+		Classifier:   classifier,
+		Concurrency:  c.options.normalizedConcurrency(),
+		AllowPartial: c.options.AllowPartial,
+		Hooks:        c.pipelineHooks(),
 	}, pipeline.Input{Path: path})
 	if err != nil {
 		return nil, err
@@ -118,9 +119,11 @@ func (c *Converter) pipelineHooks() pipeline.Hooks {
 		OnPageDone: func(ctx context.Context, e pipeline.PageDoneEvent) {
 			if c.options.Hooks.OnPageDone != nil {
 				c.options.Hooks.OnPageDone(ctx, PageDoneEvent{
-					PageIndex: e.PageIndex,
-					PageCount: e.PageCount,
-					Elapsed:   e.Elapsed,
+					PageIndex:  e.PageIndex,
+					PageCount:  e.PageCount,
+					ModelCalls: e.ModelCalls,
+					Retries:    e.Retries,
+					Elapsed:    e.Elapsed,
 				})
 			}
 		},
@@ -183,7 +186,15 @@ func publicResult(result *pipeline.Result) *Result {
 		return nil
 	}
 	return &Result{
-		Articles: publicArticles(result.Articles),
+		Articles:    publicArticles(result.Articles),
+		FailedPages: publicPageErrors(result.FailedPages),
+		Details: ProcessingDetails{
+			PageCount:      result.Details.PageCount,
+			SucceededPages: result.Details.SucceededPages,
+			FailedPages:    result.Details.FailedPages,
+			ModelCalls:     result.Details.ModelCalls,
+			Retries:        result.Details.Retries,
+		},
 	}
 }
 
@@ -200,6 +211,20 @@ func publicArticles(articles []pipeline.Article) []Article {
 				Start: article.Start,
 				End:   article.End,
 			},
+		})
+	}
+	return result
+}
+
+func publicPageErrors(pages []pipeline.PageError) []PageError {
+	if len(pages) == 0 {
+		return nil
+	}
+	result := make([]PageError, 0, len(pages))
+	for _, page := range pages {
+		result = append(result, PageError{
+			PageIndex: page.PageIndex,
+			Error:     page.Error,
 		})
 	}
 	return result

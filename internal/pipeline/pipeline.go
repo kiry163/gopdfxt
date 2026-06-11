@@ -15,8 +15,10 @@ type Input struct {
 }
 
 type Result struct {
-	Content  string
-	Articles []Article
+	Content     string
+	Articles    []Article
+	FailedPages []PageError
+	Details     ProcessingDetails
 }
 
 type Article struct {
@@ -24,6 +26,19 @@ type Article struct {
 	Content string
 	Start   int
 	End     int
+}
+
+type PageError struct {
+	PageIndex int
+	Error     string
+}
+
+type ProcessingDetails struct {
+	PageCount      int
+	SucceededPages int
+	FailedPages    int
+	ModelCalls     int
+	Retries        int
 }
 
 type Extractor interface {
@@ -35,10 +50,11 @@ type Classifier interface {
 }
 
 type Options struct {
-	Extractor   Extractor
-	Classifier  Classifier
-	Concurrency int
-	Hooks       Hooks
+	Extractor    Extractor
+	Classifier   Classifier
+	Concurrency  int
+	AllowPartial bool
+	Hooks        Hooks
 }
 
 type Hooks struct {
@@ -61,9 +77,11 @@ type PageStartEvent struct {
 }
 
 type PageDoneEvent struct {
-	PageIndex int
-	PageCount int
-	Elapsed   time.Duration
+	PageIndex  int
+	PageCount  int
+	ModelCalls int
+	Retries    int
+	Elapsed    time.Duration
 }
 
 type PageErrorEvent struct {
@@ -82,7 +100,7 @@ func Convert(ctx context.Context, opts Options, input Input) (*Result, error) {
 		return nil, err
 	}
 
-	pageResults, err := classifyPages(ctx, opts, doc.Pages, doc.PageCount)
+	pageResults, failedPages, details, err := classifyPages(ctx, opts, doc.Pages, doc.PageCount)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +109,10 @@ func Convert(ctx context.Context, opts Options, input Input) (*Result, error) {
 	content := render.RenderContent(doc, groups)
 	articles := render.SplitArticles(doc, groups)
 	result := &Result{
-		Content:  content,
-		Articles: toArticles(articles),
+		Content:     content,
+		Articles:    toArticles(articles),
+		FailedPages: failedPages,
+		Details:     details,
 	}
 
 	if opts.Hooks.OnConvertDone != nil {
@@ -101,9 +121,9 @@ func Convert(ctx context.Context, opts Options, input Input) (*Result, error) {
 	return result, nil
 }
 
-func classifyPages(ctx context.Context, opts Options, pages []document.Page, pageCount int) ([]document.PageStructure, error) {
+func classifyPages(ctx context.Context, opts Options, pages []document.Page, pageCount int) ([]document.PageStructure, []PageError, ProcessingDetails, error) {
 	if opts.Classifier == nil {
-		return nil, fmt.Errorf("pipeline classifier is required")
+		return nil, nil, ProcessingDetails{}, fmt.Errorf("pipeline classifier is required")
 	}
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {
@@ -111,10 +131,12 @@ func classifyPages(ctx context.Context, opts Options, pages []document.Page, pag
 	}
 
 	results := make([]document.PageStructure, len(pages))
+	details := ProcessingDetails{PageCount: pageCount}
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	var firstErr error
-	var errMu sync.Mutex
+	var mu sync.Mutex
+	var failedPages []PageError
 
 	for i, page := range pages {
 		if ctx.Err() != nil {
@@ -136,33 +158,45 @@ func classifyPages(ctx context.Context, opts Options, pages []document.Page, pag
 				if opts.Hooks.OnPageError != nil {
 					opts.Hooks.OnPageError(ctx, PageErrorEvent{PageIndex: page.PageIndex, Err: err})
 				}
-				errMu.Lock()
+				mu.Lock()
 				if firstErr == nil {
 					firstErr = fmt.Errorf("classify page %d: %w", page.PageIndex+1, err)
 				}
-				errMu.Unlock()
+				failedPages = append(failedPages, PageError{
+					PageIndex: page.PageIndex,
+					Error:     err.Error(),
+				})
+				details.FailedPages++
+				mu.Unlock()
 				return
 			}
 
 			results[i] = result
+			mu.Lock()
+			details.SucceededPages++
+			details.ModelCalls += result.ModelCalls
+			details.Retries += result.Retries
+			mu.Unlock()
 			if opts.Hooks.OnPageDone != nil {
 				opts.Hooks.OnPageDone(ctx, PageDoneEvent{
-					PageIndex: page.PageIndex,
-					PageCount: pageCount,
-					Elapsed:   time.Since(started),
+					PageIndex:  page.PageIndex,
+					PageCount:  pageCount,
+					ModelCalls: result.ModelCalls,
+					Retries:    result.Retries,
+					Elapsed:    time.Since(started),
 				})
 			}
 		}(i, page)
 	}
 
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
-	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, nil, ProcessingDetails{}, err
 	}
-	return results, nil
+	if firstErr != nil && (!opts.AllowPartial || details.SucceededPages == 0) {
+		return nil, nil, ProcessingDetails{}, firstErr
+	}
+	return results, failedPages, details, nil
 }
 
 func toArticles(articles []render.Article) []Article {
