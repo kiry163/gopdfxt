@@ -17,32 +17,33 @@ func BuildAnalysis(page document.Page) string {
 
 请一次性完成：
 1. 判断当前页是否属于最终正文内容。
-2. 如果是正文页，找出明确应剔除的噪声 block。
-3. 将保留的 block 按最终阅读顺序组织为 groups。
+2. 如果是正文页，将应保留的正文内容按最终阅读顺序组织为 groups。
 
 请调用工具 submit_page_analysis 提交结果，不要输出普通文本、解释或 Markdown 代码块。
 
 工具参数：
 - page_type: "body" 或 "non_body"
-- ignore_block_ids: 噪声 block_id 数组
-- groups: 正文页的阅读顺序分组；非正文页为空数组
+- groups: 正文页的阅读顺序分组；每个 group 使用 ranges 指定保留 block 范围；非正文页为空数组
 
 非正文页判断：
 - 如果页面主要是目录、索引、导航信息，或列出多篇文章标题/作者/页码，应判为 non_body。
 - 如果拿不准整页是否属于 non_body，优先判为 body。
 
-噪声 block：
+保留与忽略：
 - 页眉、页脚、页码、重复刊名、卷期号、栏目名、纯导航性版式信息通常应剔除。
 - 标题、作者、单位、摘要、关键词、正文、图表、公式、参考文献等文章内容应保留。
-- 如果拿不准某个 block 是否应剔除，不要放入 ignore_block_ids。
+- 只输出应保留内容的 groups；未出现在 groups 中的 block 会被忽略。
+- 如果拿不准某个 block 是否属于正文内容，优先保留。
 
 groups 要求：
-1. page_type 为 "body" 时，剔除 ignore_block_ids 后的每个 block_id 必须且只能出现在 groups 中一次。
-2. groups 必须是最终阅读顺序。
-3. 对双栏页面，通常先读完整个左栏，再读右栏。
-4. 如果页面顶部出现的是上一页正文续段，应先输出续段，再输出该页后面才开始的新标题。
-5. 同一段正文如果只是因为换栏或分页而延续，必要时放在同一个 paragraph group 中。
-6. 如果拿不准某个 block 的类型，归为 paragraph。
+1. page_type 为 "body" 时，groups 必须按最终阅读顺序输出。
+2. 每个 group 必须包含 ranges；每个 range 使用 start_block_id 和 end_block_id 表示当前 block 列表中的连续范围，首尾都包含。
+3. 一个 group 可以包含多个 ranges，用于表达跨栏、跨区域或中间夹有噪声 block 的同一段内容。
+4. 不要让同一个 block 出现在多个 group 或多个 range 中。
+5. 对双栏页面，通常先读完整个左栏，再读右栏。
+6. 如果页面顶部出现的是上一页正文续段，应先输出续段，再输出该页后面才开始的新标题。
+7. 同一段正文如果只是因为换栏或分页而延续，必要时放在同一个 paragraph group 中。
+8. 如果拿不准某个 block 的类型，归为 paragraph。
 
 标题要求：
 1. heading 只允许用于整篇文章的主标题，也就是 level=1。

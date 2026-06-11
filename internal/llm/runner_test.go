@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kiry163/easyllm"
@@ -12,13 +13,17 @@ func TestEngineRunnerRunAnalysisUsesToolCall(t *testing.T) {
 	client := &toolClient{
 		toolName: "submit_page_analysis",
 		args: map[string]any{
-			"page_type":        "body",
-			"ignore_block_ids": []any{"p000-b001", "p000-b001"},
+			"page_type": "body",
 			"groups": []any{
 				map[string]any{
-					"kind":      "heading",
-					"level":     1,
-					"block_ids": []any{"p000-b000"},
+					"kind":  "heading",
+					"level": 1,
+					"ranges": []any{
+						map[string]any{
+							"start_block_id": "p000-b000",
+							"end_block_id":   "p000-b000",
+						},
+					},
 				},
 			},
 		},
@@ -39,9 +44,9 @@ func TestEngineRunnerRunAnalysisUsesToolCall(t *testing.T) {
 		t.Fatalf("expected body page, got %+v", result)
 	}
 	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "p000-b001" {
-		t.Fatalf("expected deduped ignore ids, got %+v", result.IgnoreBlockIDs)
+		t.Fatalf("expected omitted block to be ignored, got %+v", result.IgnoreBlockIDs)
 	}
-	if len(result.Groups) != 1 || result.Groups[0].Kind != "heading" {
+	if len(result.Groups) != 1 || result.Groups[0].Kind != "heading" || len(result.Groups[0].BlockIDs) != 1 || result.Groups[0].BlockIDs[0] != "p000-b000" {
 		t.Fatalf("unexpected analysis result: %+v", result)
 	}
 	if result.ModelCalls != 1 || result.Retries != 0 {
@@ -53,9 +58,8 @@ func TestEngineRunnerUsesConfiguredImageDetail(t *testing.T) {
 	client := &toolClient{
 		toolName: "submit_page_analysis",
 		args: map[string]any{
-			"page_type":        "non_body",
-			"ignore_block_ids": []any{},
-			"groups":           []any{},
+			"page_type": "non_body",
+			"groups":    []any{},
 		},
 	}
 	runner := NewEngineRunner(client, easyllm.Hooks{}, easyllm.ImageDetailLow)
@@ -76,6 +80,54 @@ func TestEngineRunnerUsesConfiguredImageDetail(t *testing.T) {
 	}
 	if len(user.Content) == 0 || user.Content[0].Detail != easyllm.ImageDetailLow {
 		t.Fatalf("expected low image detail, got %+v", user.Content)
+	}
+}
+
+func TestEngineRunnerExpandsMultipleRangesInOneGroup(t *testing.T) {
+	client := &toolClient{
+		toolName: "submit_page_analysis",
+		args: map[string]any{
+			"page_type": "body",
+			"groups": []any{
+				map[string]any{
+					"kind": "paragraph",
+					"ranges": []any{
+						map[string]any{
+							"start_block_id": "p000-b000",
+							"end_block_id":   "p000-b001",
+						},
+						map[string]any{
+							"start_block_id": "p000-b003",
+							"end_block_id":   "p000-b003",
+						},
+					},
+				},
+			},
+		},
+	}
+	runner := NewEngineRunner(client, easyllm.Hooks{}, easyllm.ImageDetailLow)
+
+	result, err := runner.RunAnalysis(context.Background(), document.Page{
+		PageIndex: 0,
+		Blocks: []document.Block{
+			{BlockID: "p000-b000"},
+			{BlockID: "p000-b001"},
+			{BlockID: "p000-b002"},
+			{BlockID: "p000-b003"},
+		},
+	}, "analysis prompt")
+	if err != nil {
+		t.Fatalf("RunAnalysis returned error: %v", err)
+	}
+	if len(result.Groups) != 1 {
+		t.Fatalf("expected one group, got %+v", result.Groups)
+	}
+	want := []string{"p000-b000", "p000-b001", "p000-b003"}
+	if strings.Join(result.Groups[0].BlockIDs, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected ranges to expand to %v, got %v", want, result.Groups[0].BlockIDs)
+	}
+	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "p000-b002" {
+		t.Fatalf("expected omitted middle block to be ignored, got %+v", result.IgnoreBlockIDs)
 	}
 }
 

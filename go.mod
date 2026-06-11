@@ -3,7 +3,7 @@ module github.com/kiry163/gopdfxt
 go 1.25.0
 
 require (
-	github.com/gen2brain/go-fitz v1.24.15
+	github.com/gen2brain/go-fitz v1.23.1
 	github.com/kiry163/easyllm v0.2.3
 )
 

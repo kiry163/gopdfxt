@@ -144,5 +144,17 @@ The repository includes a small example command:
 go run ./cmd/gopdfxt -input paper.pdf -api-key "$DASHSCOPE_API_KEY" -result result.json
 ```
 
+CLI model network requests retry 3 times by default after the first attempt. Set `-max-retries 0` to disable retries, or pass another value to tune it:
+
+```bash
+go run ./cmd/gopdfxt -input paper.pdf -api-key "$DASHSCOPE_API_KEY" -max-retries 5
+```
+
+Each LLM network request has a 120 second timeout by default. The CLI does not set an overall conversion timeout, so request timeouts can retry without cancelling the whole conversion:
+
+```bash
+go run ./cmd/gopdfxt -input paper.pdf -api-key "$DASHSCOPE_API_KEY" -llm-timeout 3m
+```
+
 The command is intentionally thin and intended for local testing and debugging; library usage is the primary API.
 It writes a JSON result file by default, including extracted article content, failed pages, and processing details.

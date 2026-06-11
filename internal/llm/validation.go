@@ -71,21 +71,11 @@ func ValidateStructureResult(page document.Page, result *StructureResult) []stri
 		}
 	}
 
-	var missingIDs []string
-	for _, block := range page.Blocks {
-		if _, ok := seen[block.BlockID]; !ok {
-			missingIDs = append(missingIDs, block.BlockID)
-		}
-	}
-
 	if len(unknownIDs) > 0 {
 		issues = append(issues, "包含未知 block_id: "+strings.Join(sortedSetValues(unknownIDs), ", "))
 	}
 	if len(duplicateIDs) > 0 {
 		issues = append(issues, "同一 block_id 重复出现在 groups 中: "+strings.Join(sortedSetValues(duplicateIDs), ", "))
-	}
-	if len(missingIDs) > 0 {
-		issues = append(issues, "遗漏了未处理的 block_id: "+strings.Join(missingIDs, ", "))
 	}
 	return issues
 }
@@ -129,36 +119,7 @@ func RepairAnalysisResult(page document.Page, result *PageAnalysisResult) *PageA
 		validIDs[block.BlockID] = struct{}{}
 	}
 
-	ignored := make(map[string]struct{}, len(result.IgnoreBlockIDs))
-	for _, blockID := range result.IgnoreBlockIDs {
-		blockID = strings.TrimSpace(blockID)
-		if blockID == "" {
-			continue
-		}
-		if _, ok := validIDs[blockID]; !ok {
-			continue
-		}
-		if _, ok := ignored[blockID]; ok {
-			continue
-		}
-		ignored[blockID] = struct{}{}
-		repaired.IgnoreBlockIDs = append(repaired.IgnoreBlockIDs, blockID)
-	}
-
-	retainedIDs := make(map[string]struct{}, len(page.Blocks))
-	for _, block := range page.Blocks {
-		if _, skip := ignored[block.BlockID]; skip {
-			continue
-		}
-		retainedIDs[block.BlockID] = struct{}{}
-	}
-	if len(retainedIDs) == 0 {
-		repaired.PageType = "non_body"
-		repaired.IgnoreBlockIDs = nil
-		return repaired
-	}
-
-	seen := make(map[string]struct{}, len(retainedIDs))
+	seen := make(map[string]struct{}, len(page.Blocks))
 	for _, group := range result.Groups {
 		group = normalizeGroup(group)
 		var blockIDs []string
@@ -167,7 +128,7 @@ func RepairAnalysisResult(page document.Page, result *PageAnalysisResult) *PageA
 			if blockID == "" {
 				continue
 			}
-			if _, ok := retainedIDs[blockID]; !ok {
+			if _, ok := validIDs[blockID]; !ok {
 				continue
 			}
 			if _, ok := seen[blockID]; ok {
@@ -183,21 +144,16 @@ func RepairAnalysisResult(page document.Page, result *PageAnalysisResult) *PageA
 		repaired.Groups = append(repaired.Groups, group)
 	}
 
-	var missing []string
+	if len(seen) == 0 {
+		repaired.PageType = "non_body"
+		return repaired
+	}
+
 	for _, block := range page.Blocks {
-		if _, ok := retainedIDs[block.BlockID]; !ok {
-			continue
-		}
 		if _, ok := seen[block.BlockID]; ok {
 			continue
 		}
-		missing = append(missing, block.BlockID)
-	}
-	if len(missing) > 0 {
-		repaired.Groups = append(repaired.Groups, document.Group{
-			Kind:     "paragraph",
-			BlockIDs: missing,
-		})
+		repaired.IgnoreBlockIDs = append(repaired.IgnoreBlockIDs, block.BlockID)
 	}
 	return repaired
 }

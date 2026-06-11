@@ -84,9 +84,8 @@ func (r *EngineRunner) countingHooks(stats *runStats) easyllm.Hooks {
 }
 
 type pageAnalysisArgs struct {
-	PageType       string      `tool:"name=page_type,required,desc=body for content pages, non_body for table of contents/index/navigation pages,enum=body|non_body"`
-	IgnoreBlockIDs []string    `tool:"name=ignore_block_ids,desc=Block IDs that are layout noise on body pages"`
-	Groups         []groupArgs `tool:"name=groups,desc=Reading-order groups covering every retained block exactly once on body pages"`
+	PageType string      `tool:"name=page_type,required,desc=body for content pages, non_body for table of contents/index/navigation pages,enum=body|non_body"`
+	Groups   []groupArgs `tool:"name=groups,desc=Reading-order groups for retained content on body pages; omitted blocks are ignored"`
 }
 
 type pageAnalysisStore struct {
@@ -103,13 +102,12 @@ func (pageAnalysisTool) Name() string {
 }
 
 func (pageAnalysisTool) Description() string {
-	return "Submit page content classification, ignored layout-noise blocks, and retained block reading-order groups."
+	return "Submit page content classification and retained block reading-order groups."
 }
 
 func (t pageAnalysisTool) Run(ctx context.Context, call easyllm.ToolCallContext, args pageAnalysisArgs) (easyllm.ToolResult, error) {
 	result := &PageAnalysisResult{
-		PageType:       strings.TrimSpace(strings.ToLower(args.PageType)),
-		IgnoreBlockIDs: uniqueStrings(args.IgnoreBlockIDs),
+		PageType: strings.TrimSpace(strings.ToLower(args.PageType)),
 	}
 	for _, group := range args.Groups {
 		kind := strings.TrimSpace(strings.ToLower(group.Kind))
@@ -121,10 +119,14 @@ func (t pageAnalysisTool) Run(ctx context.Context, call easyllm.ToolCallContext,
 		if kind != "heading" {
 			level = 0
 		}
+		blockIDs, err := expandRanges(t.page, group.Ranges)
+		if err != nil {
+			return easyllm.ToolResult{}, validationError([]string{err.Error()})
+		}
 		result.Groups = append(result.Groups, document.Group{
 			Kind:     kind,
 			Level:    level,
-			BlockIDs: uniqueStrings(group.BlockIDs),
+			BlockIDs: blockIDs,
 		})
 	}
 	result = RepairAnalysisResult(t.page, result)
@@ -136,17 +138,21 @@ func (t pageAnalysisTool) Run(ctx context.Context, call easyllm.ToolCallContext,
 	return easyllm.ToolResult{
 		Message: "page analysis accepted",
 		Data: map[string]any{
-			"page_type":        result.PageType,
-			"ignore_block_ids": result.IgnoreBlockIDs,
-			"groups":           result.Groups,
+			"page_type": result.PageType,
+			"groups":    result.Groups,
 		},
 	}, nil
 }
 
 type groupArgs struct {
-	Kind     string   `tool:"name=kind,required,enum=heading|paragraph|formula|image|table"`
-	Level    int      `tool:"name=level,desc=Use 1 only for whole-article title headings"`
-	BlockIDs []string `tool:"name=block_ids,required,minItems=1"`
+	Kind   string      `tool:"name=kind,required,enum=heading|paragraph|formula|image|table"`
+	Level  int         `tool:"name=level,desc=Use 1 only for whole-article title headings"`
+	Ranges []rangeArgs `tool:"name=ranges,required,minItems=1,desc=Retained block ranges in reading order"`
+}
+
+type rangeArgs struct {
+	StartBlockID string `tool:"name=start_block_id,required,desc=First block_id in this retained range"`
+	EndBlockID   string `tool:"name=end_block_id,required,desc=Last block_id in this retained range"`
 }
 
 func validateAnalysisResult(page document.Page, result *PageAnalysisResult) []string {
@@ -170,6 +176,37 @@ func validationError(issues []string) error {
 		"code":   "validation_failed",
 		"issues": issues,
 	})
+}
+
+func expandRanges(page document.Page, ranges []rangeArgs) ([]string, error) {
+	indexByID := make(map[string]int, len(page.Blocks))
+	for index, block := range page.Blocks {
+		indexByID[block.BlockID] = index
+	}
+
+	var blockIDs []string
+	for rangeIndex, item := range ranges {
+		startID := strings.TrimSpace(item.StartBlockID)
+		endID := strings.TrimSpace(item.EndBlockID)
+		if startID == "" || endID == "" {
+			return nil, fmt.Errorf("groups range %d must include start_block_id and end_block_id", rangeIndex)
+		}
+		start, ok := indexByID[startID]
+		if !ok {
+			return nil, fmt.Errorf("groups range %d contains unknown start_block_id: %s", rangeIndex, startID)
+		}
+		end, ok := indexByID[endID]
+		if !ok {
+			return nil, fmt.Errorf("groups range %d contains unknown end_block_id: %s", rangeIndex, endID)
+		}
+		if start > end {
+			return nil, fmt.Errorf("groups range %d has start_block_id after end_block_id: %s > %s", rangeIndex, startID, endID)
+		}
+		for i := start; i <= end; i++ {
+			blockIDs = append(blockIDs, page.Blocks[i].BlockID)
+		}
+	}
+	return blockIDs, nil
 }
 
 func uniqueStrings(values []string) []string {

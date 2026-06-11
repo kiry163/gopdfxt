@@ -28,7 +28,7 @@ func TestValidatePageFilterResultRejectsBodyWithNoKeptBlocks(t *testing.T) {
 	}
 }
 
-func TestValidateStructureResultReportsCoverageIssues(t *testing.T) {
+func TestValidateStructureResultReportsInvalidReferenceIssues(t *testing.T) {
 	page := document.Page{
 		PageIndex: 0,
 		Blocks: []document.Block{
@@ -52,12 +52,12 @@ func TestValidateStructureResultReportsCoverageIssues(t *testing.T) {
 	if !strings.Contains(joined, "未知 block_id") {
 		t.Fatalf("expected unknown id issue, got %v", issues)
 	}
-	if !strings.Contains(joined, "遗漏了未处理的 block_id: b") {
-		t.Fatalf("expected missing id issue, got %v", issues)
+	if strings.Contains(joined, "遗漏了未处理的 block_id") {
+		t.Fatalf("expected omitted blocks to be allowed, got %v", issues)
 	}
 }
 
-func TestRepairAnalysisResultDropsInvalidIDsAndAddsMissingBlocks(t *testing.T) {
+func TestRepairAnalysisResultDropsInvalidIDsAndIgnoresMissingBlocks(t *testing.T) {
 	page := document.Page{
 		PageIndex: 0,
 		Blocks: []document.Block{
@@ -68,8 +68,7 @@ func TestRepairAnalysisResultDropsInvalidIDsAndAddsMissingBlocks(t *testing.T) {
 	}
 
 	result := RepairAnalysisResult(page, &PageAnalysisResult{
-		PageType:       "body",
-		IgnoreBlockIDs: []string{"c", "missing"},
+		PageType: "body",
 		Groups: []document.Group{
 			{Kind: "paragraph", BlockIDs: []string{"a", "unknown", "a"}},
 		},
@@ -78,16 +77,13 @@ func TestRepairAnalysisResultDropsInvalidIDsAndAddsMissingBlocks(t *testing.T) {
 	if result.PageType != "body" {
 		t.Fatalf("expected body page, got %+v", result)
 	}
-	if len(result.IgnoreBlockIDs) != 1 || result.IgnoreBlockIDs[0] != "c" {
-		t.Fatalf("expected repaired ignore ids, got %+v", result.IgnoreBlockIDs)
+	if len(result.IgnoreBlockIDs) != 2 || result.IgnoreBlockIDs[0] != "b" || result.IgnoreBlockIDs[1] != "c" {
+		t.Fatalf("expected omitted ids to be ignored, got %+v", result.IgnoreBlockIDs)
 	}
-	if len(result.Groups) != 2 {
-		t.Fatalf("expected original group plus missing group, got %+v", result.Groups)
+	if len(result.Groups) != 1 {
+		t.Fatalf("expected only retained group, got %+v", result.Groups)
 	}
 	if len(result.Groups[0].BlockIDs) != 1 || result.Groups[0].BlockIDs[0] != "a" {
 		t.Fatalf("expected invalid and duplicate ids removed, got %+v", result.Groups[0].BlockIDs)
-	}
-	if len(result.Groups[1].BlockIDs) != 1 || result.Groups[1].BlockIDs[0] != "b" {
-		t.Fatalf("expected missing id appended as paragraph, got %+v", result.Groups[1].BlockIDs)
 	}
 }

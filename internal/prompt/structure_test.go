@@ -20,8 +20,9 @@ func TestBuildAnalysisCombinesFilteringAndStructure(t *testing.T) {
 	for _, want := range []string{
 		"submit_page_analysis",
 		"page_type",
-		"ignore_block_ids",
-		"每个 block_id 必须且只能出现在 groups 中一次",
+		"start_block_id",
+		"end_block_id",
+		"未出现在 groups 中的 block 会被忽略",
 		"groups",
 		"heading",
 		"paragraph",
@@ -30,5 +31,8 @@ func TestBuildAnalysisCombinesFilteringAndStructure(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected prompt to contain %q, got %q", want, prompt)
 		}
+	}
+	if strings.Contains(prompt, "ignore_block_ids") {
+		t.Fatalf("expected prompt not to contain ignore_block_ids, got %q", prompt)
 	}
 }

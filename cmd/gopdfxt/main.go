@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/kiry163/easyllm"
 	"github.com/kiry163/gopdfxt"
@@ -20,6 +21,8 @@ func main() {
 	provider := flag.String("provider", gopdfxt.ProviderQwen, "LLM provider")
 	model := flag.String("model", "qwen3-vl-plus", "LLM model")
 	apiKey := flag.String("api-key", os.Getenv("GOPDFXT_API_KEY"), "LLM API key")
+	maxRetries := flag.Int("max-retries", 3, "network request retries after the first attempt")
+	llmTimeout := flag.Duration("llm-timeout", 120*time.Second, "timeout for each LLM network request")
 	debugDir := flag.String("debug-dir", "", "optional directory for debug artifacts")
 	flag.Parse()
 
@@ -29,7 +32,7 @@ func main() {
 	}
 
 	opts := gopdfxt.Options{
-		LLM:          llmOptions(*provider, *apiKey, *model),
+		LLM:          llmOptions(*provider, *apiKey, *model, *maxRetries, *llmTimeout),
 		Concurrency:  30,
 		AllowPartial: true,
 		Hooks:        progressHooks(os.Stderr),
@@ -72,13 +75,15 @@ func main() {
 	}
 }
 
-func llmOptions(provider, apiKey, model string) gopdfxt.LLMOptions {
+func llmOptions(provider, apiKey, model string, maxRetries int, timeout time.Duration) gopdfxt.LLMOptions {
 	enableThinking := false
 	return gopdfxt.LLMOptions{
 		Provider:       provider,
 		APIKey:         apiKey,
 		Model:          model,
 		EnableThinking: &enableThinking,
+		MaxRetries:     maxRetries,
+		Timeout:        timeout,
 	}
 }
 

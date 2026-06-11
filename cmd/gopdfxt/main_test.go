@@ -4,17 +4,32 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kiry163/gopdfxt"
 )
 
 func TestLLMOptionsDefaultDisableThinking(t *testing.T) {
-	opts := llmOptions("qwen", "key", "model")
+	opts := llmOptions("qwen", "key", "model", 0, 0)
 	if opts.EnableThinking == nil {
 		t.Fatalf("expected EnableThinking to be set")
 	}
 	if *opts.EnableThinking {
 		t.Fatalf("expected thinking mode to be disabled by default")
+	}
+}
+
+func TestLLMOptionsSetsMaxRetries(t *testing.T) {
+	opts := llmOptions("qwen", "key", "model", 3, 0)
+	if opts.MaxRetries != 3 {
+		t.Fatalf("expected max retries to be 3, got %d", opts.MaxRetries)
+	}
+}
+
+func TestLLMOptionsSetsRequestTimeout(t *testing.T) {
+	opts := llmOptions("qwen", "key", "model", 3, 120*time.Second)
+	if opts.Timeout != 120*time.Second {
+		t.Fatalf("expected request timeout to be 120s, got %s", opts.Timeout)
 	}
 }
 
